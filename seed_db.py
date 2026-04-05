@@ -1,6 +1,7 @@
 from app import app, db
 from model import User, Department, Doctor, Patient, Appointment, Treatment
 from datetime import datetime, timedelta, date, time
+from werkzeug.security import generate_password_hash
 import random
 
 def seed_data():
@@ -12,7 +13,7 @@ def seed_data():
         # 2. Create Admin (Predefined - No registration allowed)
         admin = User(
             username='admin',
-            password='adminpassword',
+            password=generate_password_hash('adminpassword'),
             email='admin@hospital.com',
             role='admin',
             is_active=True
@@ -58,7 +59,7 @@ def seed_data():
         for i in range(20):
             d_user = User(
                 username=f'doctor{i+1}',
-                password='doctor123',
+                password=generate_password_hash('doctor123'),
                 email=f'doctor{i+1}@hospital.com',
                 role='doctor',
                 is_active=True
@@ -98,7 +99,7 @@ def seed_data():
         for i in range(50):
             p_user = User(
                 username=f'patient{i+1}',
-                password='patient123',
+                password=generate_password_hash('patient123'),
                 email=f'patient{i+1}@email.com',
                 role='patient',
                 is_active=(i % 25 != 0)
