@@ -119,8 +119,14 @@ const PatientDashboard = {
                 <h5 class="fw-bold mb-1" style="color:var(--navy);">My Appointments</h5>
                 <p style="font-size:0.85rem; color:var(--gray-400); margin-bottom:1rem;">Manage your schedule and view treatments</p>
 
-                <div class="d-flex gap-2 mb-3 flex-wrap">
-                    <button v-for="f in [{key:'all',label:'All'},{key:'upcoming',label:'Upcoming'},{key:'past',label:'Past'},{key:'completed',label:'Completed'},{key:'cancelled',label:'Cancelled'}]" :key="f.key" class="btn btn-sm" :class="aptFilter === f.key ? 'btn-dark' : 'btn-outline-secondary'" @click="aptFilter = f.key; fetchAppointments()" style="font-size:0.8rem;">{{ f.label }}</button>
+                <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                    <div class="d-flex gap-2">
+                        <button v-for="f in [{key:'all',label:'All'},{key:'upcoming',label:'Upcoming'},{key:'past',label:'Past'},{key:'completed',label:'Completed'},{key:'cancelled',label:'Cancelled'}]" :key="f.key" class="btn btn-sm" :class="aptFilter === f.key ? 'btn-dark' : 'btn-outline-secondary'" @click="aptFilter = f.key; fetchAppointments()" style="font-size:0.8rem;">{{ f.label }}</button>
+                    </div>
+                    <button class="btn btn-sm btn-outline-teal" @click="requestExport" :disabled="exportingCSV">
+                        <span v-if="exportingCSV" class="spinner-border spinner-border-sm me-1" style="width: 0.8rem; height: 0.8rem;"></span>
+                        {{ exportingCSV ? 'Generating CSV...' : 'Export History' }}
+                    </button>
                 </div>
 
                 <div class="panel p-0">
@@ -307,6 +313,7 @@ const PatientDashboard = {
         // Profile
         const profileForm = Vue.reactive({ full_name: '', email: '', contact: '', dob: '', gender: '', blood_group: '', address: '' })
         const savingProfile = Vue.ref(false)
+        const exportingCSV = Vue.ref(false)
 
         // Booking/Reschedule Flow
         let appointmentModalInstance = null
@@ -406,6 +413,46 @@ const PatientDashboard = {
                 expandedTreatment.value = null;
             } else {
                 expandedTreatment.value = apt.id;
+            }
+        }
+
+        const requestExport = async () => {
+            if (exportingCSV.value) return;
+            exportingCSV.value = true;
+            try {
+                const res = await fetchApi('/api/patient/export', { method: 'POST' });
+                const data = await res.json();
+                
+                if (res.ok && data.task_id) {
+                    pollExportStatus(data.task_id);
+                } else {
+                    alert(data.msg || 'Export failed to start');
+                    exportingCSV.value = false;
+                }
+            } catch (e) {
+                alert('Connection error');
+                exportingCSV.value = false;
+            }
+        }
+
+        const pollExportStatus = async (taskId) => {
+            try {
+                const res = await fetchApi('/api/patient/export/' + taskId);
+                const data = await res.json();
+                
+                if (data.task_status === 'SUCCESS') {
+                    exportingCSV.value = false;
+                    // Trigger download
+                    window.open(data.task_result, '_blank');
+                } else if (data.task_status === 'FAILURE') {
+                    exportingCSV.value = false;
+                    alert('Export failed.');
+                } else {
+                    // Still processing
+                    setTimeout(() => pollExportStatus(taskId), 2000);
+                }
+            } catch (e) {
+                exportingCSV.value = false;
             }
         }
 
@@ -516,7 +563,7 @@ const PatientDashboard = {
             activeTab, patientName, stats,
             searchDoctors, filterDept, departments, doctorsList, fetchDoctors,
             aptFilter, appointments, fetchAppointments, expandedTreatment, viewTreatment, cancelAppointment,
-            profileForm, savingProfile, updateProfile,
+            profileForm, savingProfile, updateProfile, exportingCSV, requestExport,
             openBookModal, openRescheduleModal, fetchSlots, loadingSlots, availableSlots, bookingForm, savingAppointment, bookingError, todayDate, isReschedule, selectedDoctor, resetBookingFlow, submitBooking, switchTab, logout
         }
     }

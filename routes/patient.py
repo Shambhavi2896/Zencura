@@ -3,6 +3,8 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from model import db, User, Doctor, Patient, Appointment, Treatment, Department
 from datetime import date, time, timedelta
 from sqlalchemy import or_
+from tasks.export_csv import generate_patient_export
+from celery.result import AsyncResult
 
 patient_bp = Blueprint('patient', __name__)
 
@@ -398,3 +400,29 @@ def update_profile():
 
     # Update localStorage name
     return jsonify(msg='Profile updated successfully', full_name=pat.full_name), 200
+
+# ── Export History (Asynchronous) ────────────────────────────
+@patient_bp.route('/api/patient/export', methods=['POST'])
+@jwt_required()
+def request_export():
+    pat = get_current_patient()
+    if not pat:
+        return jsonify(msg='Forbidden'), 403
+        
+    task = generate_patient_export.delay(pat.id)
+    return jsonify(msg="Export task started", task_id=task.id), 202
+
+@patient_bp.route('/api/patient/export/<task_id>', methods=['GET'])
+@jwt_required()
+def get_export_status(task_id):
+    pat = get_current_patient()
+    if not pat:
+        return jsonify(msg='Forbidden'), 403
+        
+    task_result = AsyncResult(task_id)
+    result = {
+        "task_id": task_id,
+        "task_status": task_result.status,
+        "task_result": task_result.result if task_result.status == 'SUCCESS' else str(task_result.info)
+    }
+    return jsonify(result), 200
