@@ -3,6 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt
 from werkzeug.security import generate_password_hash
 from model import db, User, Doctor, Patient, Appointment, Department
 from sqlalchemy import or_
+from cache import cache
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -12,6 +13,7 @@ def is_admin():
 
 @admin_bp.route('/api/admin/doctors', methods=['GET'])
 @jwt_required()
+@cache.cached(timeout=60, query_string=True)
 def get_doctors():
     if not is_admin():
         return jsonify(msg='Forbidden'), 403
@@ -81,6 +83,7 @@ def add_doctor():
     )
     db.session.add(new_doc)
     db.session.commit()
+    cache.clear()
 
     return jsonify(msg='Doctor added successfully'), 201
 
@@ -106,11 +109,14 @@ def update_doctor(id):
          doctor.user.password = generate_password_hash(data['password'])
 
     db.session.commit()
+    cache.clear()
+    
     return jsonify(msg='Doctor updated successfully'), 200
 
 
 @admin_bp.route('/api/admin/patients', methods=['GET'])
 @jwt_required()
+@cache.cached(timeout=60, query_string=True)
 def get_patients():
     if not is_admin():
         return jsonify(msg='Forbidden'), 403
@@ -160,6 +166,7 @@ def toggle_user_status(id):
 
     user.is_active = not user.is_active
     db.session.commit()
+    cache.clear()
 
     status_str = "activated" if user.is_active else "deactivated"
     return jsonify(msg=f'User account has been {status_str}'), 200

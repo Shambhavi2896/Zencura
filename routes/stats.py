@@ -1,11 +1,13 @@
 from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt
 from model import db, Doctor, Patient, Appointment, Department
+from cache import cache
 
 stats_bp = Blueprint('stats', __name__)
 
 @stats_bp.route('/api/admin/stats', methods=['GET'])
 @jwt_required()
+@cache.cached(timeout=30)
 def admin_stats():
     from model import User
     from datetime import date

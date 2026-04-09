@@ -17,6 +17,9 @@ app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
 
 db.init_app(app)
 jwt = JWTManager(app)
+from cache import cache
+cache.init_app(app)
+
 app.register_blueprint(auth_bp)
 app.register_blueprint(stats_bp)
 app.register_blueprint(admin_bp)

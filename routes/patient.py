@@ -5,6 +5,7 @@ from datetime import date, time, timedelta
 from sqlalchemy import or_
 from tasks.export_csv import generate_patient_export
 from celery.result import AsyncResult
+from cache import cache
 
 patient_bp = Blueprint('patient', __name__)
 
@@ -77,6 +78,7 @@ def patient_dashboard():
 # ── Search Doctors ───────────────────────────────────────────
 @patient_bp.route('/api/patient/doctors', methods=['GET'])
 @jwt_required()
+@cache.cached(timeout=300, query_string=True)
 def search_doctors():
     pat = get_current_patient()
     if not pat:
@@ -118,6 +120,7 @@ def search_doctors():
 # ── Get Departments (for filter dropdown) ────────────────────
 @patient_bp.route('/api/patient/departments', methods=['GET'])
 @jwt_required()
+@cache.cached(timeout=3600)
 def get_departments():
     pat = get_current_patient()
     if not pat:
@@ -130,6 +133,7 @@ def get_departments():
 # ── Get Available Slots for a Doctor ─────────────────────────
 @patient_bp.route('/api/patient/doctors/<int:doctor_id>/slots', methods=['GET'])
 @jwt_required()
+@cache.cached(timeout=30, query_string=True)
 def get_doctor_slots(doctor_id):
     pat = get_current_patient()
     if not pat:
