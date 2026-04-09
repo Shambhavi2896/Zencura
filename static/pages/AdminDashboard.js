@@ -212,18 +212,53 @@ const AdminDashboard = {
 
                 <div class="panel p-0">
                     <table class="table table-hover table-sm align-middle mb-0" style="font-size:0.85rem;">
-                        <thead><tr style="color:var(--gray-400); font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em;"><th class="ps-3">ID</th><th>Patient</th><th>Doctor</th><th>Department</th><th>Date</th><th>Time</th><th>Status</th></tr></thead>
+                        <thead><tr style="color:var(--gray-400); font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em;"><th class="ps-3">ID</th><th>Patient</th><th>Doctor</th><th>Department</th><th>Date</th><th>Time</th><th>Status</th><th>Actions</th></tr></thead>
                         <tbody>
-                            <tr v-for="apt in filteredAppointments" :key="apt.id">
-                                <td class="ps-3 text-muted fw-medium">#{{ apt.id }}</td>
-                                <td class="fw-medium">{{ apt.patient_name }}</td>
-                                <td>{{ apt.doctor_name }}</td>
-                                <td>{{ apt.department_name }}</td>
-                                <td>{{ apt.date }}</td>
-                                <td>{{ apt.time }}</td>
-                                <td><span class="status-pill" :class="apt.status.toLowerCase()">{{ apt.status }}</span></td>
-                            </tr>
-                            <tr v-if="filteredAppointments.length === 0"><td colspan="7" class="text-center py-4 text-muted">No appointments found</td></tr>
+                            <template v-for="apt in filteredAppointments" :key="apt.id">
+                                <tr>
+                                    <td class="ps-3 text-muted fw-medium">#{{ apt.id }}</td>
+                                    <td class="fw-medium">{{ apt.patient_name }}</td>
+                                    <td>{{ apt.doctor_name }}</td>
+                                    <td>{{ apt.department_name }}</td>
+                                    <td>{{ apt.date }}</td>
+                                    <td>{{ apt.time }}</td>
+                                    <td><span class="status-pill" :class="apt.status.toLowerCase()">{{ apt.status }}</span></td>
+                                    <td>
+                                        <div class="d-flex gap-1" v-if="apt.status === 'Completed' && apt.treatment">
+                                            <button class="btn btn-sm btn-light py-0 px-2" style="font-size:0.75rem;" @click="viewTreatment(apt)">Record</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr v-if="expandedTreatment === apt.id" class="table-light">
+                                    <td colspan="8" class="p-3">
+                                        <div class="bg-white p-3 rounded border" style="font-size:0.85rem;">
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <h6 class="fw-bold m-0" style="color:var(--teal-700);">Treatment Record</h6>
+                                                <button class="btn-close btn-sm" style="font-size:0.6rem;" @click="expandedTreatment = null"></button>
+                                            </div>
+                                            <div class="row g-3">
+                                                <div class="col-md-6">
+                                                    <span class="d-block text-muted" style="font-size:0.75rem; text-transform:uppercase;">Diagnosis</span>
+                                                    <div>{{ apt.treatment.diagnosis || '—' }}</div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <span class="d-block text-muted" style="font-size:0.75rem; text-transform:uppercase;">Prescription</span>
+                                                    <div>{{ apt.treatment.prescription || '—' }}</div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <span class="d-block text-muted" style="font-size:0.75rem; text-transform:uppercase;">Notes</span>
+                                                    <div>{{ apt.treatment.notes || '—' }}</div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <span class="d-block text-muted" style="font-size:0.75rem; text-transform:uppercase;">Next Visit</span>
+                                                    <div>{{ apt.treatment.next_visit || 'Not specified' }}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                            <tr v-if="filteredAppointments.length === 0"><td colspan="8" class="text-center py-4 text-muted">No appointments found</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -274,6 +309,7 @@ const AdminDashboard = {
         const patients = Vue.ref([])
         const appointments = Vue.ref([])
         const departments = Vue.ref([])
+        const expandedTreatment = Vue.ref(null)
         const searchQueries = Vue.reactive({ doctors: '', patients: '' })
         const docForm = Vue.reactive({ id: null, username: '', email: '', full_name: '', department_id: '', contact: '', experience: '', qualification: '', availability: '', password: '' })
         const saving = Vue.ref(false)
@@ -355,8 +391,17 @@ const AdminDashboard = {
                 else alert((await res.json()).msg)
             } catch (e) { alert('Could not update status') }
         }
+
+        const viewTreatment = (apt) => {
+            if (expandedTreatment.value === apt.id) {
+                expandedTreatment.value = null;
+            } else {
+                expandedTreatment.value = apt.id;
+            }
+        }
+
         const logout = () => { localStorage.clear(); router.push('/login') }
 
-        return { activeTab, aptFilter, stats, showBlacklisted, doctors, patients, appointments, departments, searchQueries, filteredDoctors, filteredPatients, filteredAppointments, docForm, saving, switchTab, fetchDoctors, fetchPatients, fetchAppointments, openDoctorModal, saveDoctor, toggleStatus, logout }
+        return { activeTab, aptFilter, stats, showBlacklisted, doctors, patients, appointments, departments, searchQueries, filteredDoctors, filteredPatients, filteredAppointments, docForm, saving, switchTab, fetchDoctors, fetchPatients, fetchAppointments, openDoctorModal, saveDoctor, toggleStatus, expandedTreatment, viewTreatment, logout }
     }
 }

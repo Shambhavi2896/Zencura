@@ -173,15 +173,24 @@ def get_appointments():
     appointments = Appointment.query.order_by(Appointment.date.desc(), Appointment.time.desc()).all()
     result = []
     for a in appointments:
-        result.append({
+        item = {
             'id': a.id,
             'doctor_name': a.doctor.full_name,
             'department_name': a.doctor.department.name,
             'patient_name': a.patient.full_name,
             'date': a.date.isoformat(),
             'time': a.time.isoformat(),
-            'status': a.status
-        })
+            'status': a.status,
+            'treatment': None
+        }
+        if a.treatment:
+            item['treatment'] = {
+                'diagnosis': a.treatment.diagnosis,
+                'prescription': a.treatment.prescription,
+                'notes': a.treatment.notes,
+                'next_visit': a.treatment.next_visit.isoformat() if a.treatment.next_visit else None
+            }
+        result.append(item)
 
     return jsonify(result), 200
 
