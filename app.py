@@ -5,6 +5,7 @@ from model import db
 from routes.auth import auth_bp
 from routes.stats import stats_bp
 from routes.admin import admin_bp
+from routes.doctor import doctor_bp
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///hms.db'
@@ -18,6 +19,7 @@ jwt = JWTManager(app)
 app.register_blueprint(auth_bp)
 app.register_blueprint(stats_bp)
 app.register_blueprint(admin_bp)
+app.register_blueprint(doctor_bp)
 
 @app.route('/')
 def index():
