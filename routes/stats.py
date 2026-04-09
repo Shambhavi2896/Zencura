@@ -7,14 +7,60 @@ stats_bp = Blueprint('stats', __name__)
 @stats_bp.route('/api/admin/stats', methods=['GET'])
 @jwt_required()
 def admin_stats():
+    from model import User
+    from datetime import date
+
     claims = get_jwt()
     if claims.get('role') != 'admin':
         return jsonify(msg='Forbidden'), 403
 
+    doctors_count = Doctor.query.count()
+    patients_count = Patient.query.count()
+    appointments_count = Appointment.query.count()
+    departments_count = Department.query.count()
+
+    booked = Appointment.query.filter_by(status='Booked').count()
+    completed = Appointment.query.filter_by(status='Completed').count()
+    cancelled = Appointment.query.filter_by(status='Cancelled').count()
+
+    blacklisted_docs = db.session.query(Doctor).join(User).filter(User.is_active == False).count()
+    blacklisted_pats = db.session.query(Patient).join(User).filter(User.is_active == False).count()
+
+    dept_stats = db.session.query(Department.name, db.func.count(Appointment.id)).\
+        select_from(Department).\
+        outerjoin(Doctor, Doctor.department_id == Department.id).\
+        outerjoin(Appointment, Appointment.doctor_id == Doctor.id).\
+        group_by(Department.name).all()
+
+    chart_labels = [d[0] for d in dept_stats]
+    chart_data = [d[1] for d in dept_stats]
+
+    recent = Appointment.query.order_by(Appointment.date.desc(), Appointment.time.desc()).limit(5).all()
+    recent_list = []
+    for a in recent:
+        recent_list.append({
+            'id': a.id,
+            'patient': a.patient.full_name,
+            'doctor': a.doctor.full_name,
+            'dept': a.doctor.department.name,
+            'date': a.date.isoformat(),
+            'time': a.time.isoformat(),
+            'status': a.status
+        })
+
     return jsonify(
-        doctors=Doctor.query.count(),
-        patients=Patient.query.count(),
-        appointments=Appointment.query.count()
+        doctors=doctors_count,
+        patients=patients_count,
+        appointments=appointments_count,
+        departments=departments_count,
+        booked=booked,
+        completed=completed,
+        cancelled=cancelled,
+        blacklisted_docs=blacklisted_docs,
+        blacklisted_pats=blacklisted_pats,
+        chart_labels=chart_labels,
+        chart_data=chart_data,
+        recent=recent_list
     ), 200
 
 @stats_bp.route('/api/doctor/stats', methods=['GET'])

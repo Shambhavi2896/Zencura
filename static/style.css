@@ -280,9 +280,9 @@ body {
 }
 
 .dash-welcome {
-    background: linear-gradient(135deg, var(--teal-600) 0%, var(--teal-500) 50%, var(--teal-400) 100%);
+    background: linear-gradient(135deg, #14b8a6 0%, #2dd4bf 50%, #5eead4 100%);
     border-radius: 20px;
-    padding: 2.5rem;
+    padding: 2rem 2.5rem;
     color: #fff;
     margin-bottom: 2rem;
     position: relative;
@@ -294,7 +294,7 @@ body {
     position: absolute;
     width: 200px;
     height: 200px;
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.1);
     border-radius: 50%;
     top: -60px;
     right: -40px;
@@ -412,3 +412,223 @@ body {
     font-weight: 600;
     margin-bottom: 0.6rem;
 }
+
+/* Sidebar Layout */
+.admin-layout {
+    display: flex;
+    min-height: 100vh;
+    background: var(--gray-50);
+}
+
+.sidebar {
+    width: 240px;
+    background: #fff;
+    border-right: 1px solid var(--gray-200);
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 1000;
+}
+
+.sidebar-header {
+    padding: 1.25rem 1.25rem;
+    border-bottom: 1px solid var(--gray-100);
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.sidebar-header img {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+}
+
+.sidebar-header h5 {
+    margin: 0;
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--navy);
+}
+
+.sidebar-menu {
+    padding: 1rem 0.75rem;
+    flex-grow: 1;
+}
+
+.sidebar-item {
+    display: block;
+    padding: 0.65rem 1rem;
+    color: var(--gray-500);
+    text-decoration: none;
+    border-radius: 8px;
+    margin-bottom: 2px;
+    font-weight: 500;
+    font-size: 0.88rem;
+    transition: all 0.15s;
+    cursor: pointer;
+}
+
+.sidebar-item:hover {
+    background: var(--gray-50);
+    color: var(--navy);
+}
+
+.sidebar-item.active {
+    background: var(--teal-50);
+    color: var(--teal-700);
+    font-weight: 600;
+}
+
+.sidebar-footer {
+    padding: 1.25rem;
+    border-top: 1px solid var(--gray-100);
+}
+
+.main-content {
+    flex-grow: 1;
+    margin-left: 240px;
+    padding: 2rem 2.5rem;
+}
+
+/* Metric Cards */
+.metric-card {
+    background: #fff;
+    border: 1px solid var(--gray-100);
+    border-radius: 10px;
+    padding: 1.25rem;
+    transition: border-color 0.2s;
+}
+
+.metric-card:hover {
+    border-color: var(--teal-200);
+}
+
+.metric-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--navy);
+    line-height: 1;
+    margin-bottom: 0.25rem;
+}
+
+.metric-label {
+    font-size: 0.8rem;
+    color: var(--gray-400);
+    font-weight: 500;
+}
+
+.metric-card-sm {
+    background: #fff;
+    border: 1px solid var(--gray-100);
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.metric-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.metric-sm-value {
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--navy);
+}
+
+.metric-sm-label {
+    font-size: 0.8rem;
+    color: var(--gray-400);
+}
+
+/* Panels */
+.panel {
+    background: #fff;
+    border: 1px solid var(--gray-100);
+    border-radius: 10px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.panel-header {
+    font-weight: 600;
+    font-size: 0.88rem;
+    color: var(--navy);
+    margin-bottom: 1rem;
+}
+
+/* Profile Cards */
+.profile-card {
+    background: #fff;
+    border: 1px solid var(--gray-100);
+    border-radius: 10px;
+    padding: 1rem;
+    transition: all 0.2s;
+}
+
+.profile-card:hover {
+    border-color: var(--teal-200);
+    box-shadow: 0 4px 16px -6px rgba(0,0,0,0.06);
+}
+
+.avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.95rem;
+    flex-shrink: 0;
+}
+
+.profile-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.3rem;
+    font-size: 0.78rem;
+    color: var(--gray-500);
+    margin-top: 0.5rem;
+}
+
+.detail-label {
+    color: var(--gray-400);
+    font-weight: 500;
+    margin-right: 0.3rem;
+}
+
+/* Status Pills */
+.status-pill {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.status-pill.booked {
+    background: var(--teal-50);
+    color: var(--teal-700);
+}
+
+.status-pill.completed {
+    background: #f0fdf4;
+    color: #15803d;
+}
+
+.status-pill.cancelled {
+    background: #fef2f2;
+    color: #dc2626;
+}
+
