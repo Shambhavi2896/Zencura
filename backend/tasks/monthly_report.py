@@ -1,221 +1,166 @@
 from datetime import date
 import logging
 import os
-
 from dateutil.relativedelta import relativedelta
-from sqlalchemy import extract
-
 from backend.core.celery_worker import celery_app
-from model import Appointment, Department, Doctor, Patient, Payment, Treatment, db
-
+from backend.models import Appointment, Doctor, User, db
+from flask_mail import Mail, Message
 logger = logging.getLogger(__name__)
 
+@celery_app.task(
+    name="backend.tasks.monthly_report.generate_monthly_report",
+    bind=True,
+    max_retries=3,
+)
 
-@celery_app.task(name='backend.tasks.monthly_report.generate_monthly_report', bind=True, max_retries=3)
 def generate_monthly_report(self):
     try:
-        today = date.today()
-        first_day = today.replace(day=1)
-        last_month_start = first_day - relativedelta(months=1)
-        last_month_end = first_day - relativedelta(days=1)
-        month_name = last_month_start.strftime("%B_%Y")
+        from app import create_app
+        app = create_app()
+        
+        with app.app_context():
+            mail = Mail(app)
+            
+            today = date.today()
+            first_day = today.replace(day=1)
+            last_month_start = first_day - relativedelta(months=1)
+            last_month_end = first_day - relativedelta(days=1)
+            month_name = last_month_start.strftime("%B_%Y")
+            
+            doctors = Doctor.query.all()
+            
+            sent_count = 0
+            for doctor in doctors:
+                user = User.query.get(doctor.user_id)
+                if not user or not user.email:
+                    continue
 
-        reports_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'frontend', 'static', 'reports')
-        os.makedirs(reports_dir, exist_ok=True)
+                apts = Appointment.query.filter(
+                    Appointment.doctor_id == doctor.id,
+                    Appointment.date >= last_month_start,
+                    Appointment.date <= last_month_end
+                ).all()
+                
+                # If no data for last month, check this month (for testing convenience)
+                if not apts:
+                    this_month_start = today.replace(day=1)
+                    apts = Appointment.query.filter(
+                        Appointment.doctor_id == doctor.id,
+                        Appointment.date >= this_month_start,
+                        Appointment.date <= today
+                    ).all()
+                
+                total_apts = len(apts)
+                
+                if total_apts == 0:
+                    continue
+                    
+                completed_apts = sum(1 for a in apts if a.status == "Completed")
+                completion_rate = round((completed_apts / max(total_apts, 1) * 100), 1)
 
-        total_apts = Appointment.query.filter(
-            Appointment.date >= last_month_start,
-            Appointment.date <= last_month_end,
-        ).count()
-
-        completed_apts = Appointment.query.filter(
-            Appointment.date >= last_month_start,
-            Appointment.date <= last_month_end,
-            Appointment.status == 'Completed',
-        ).count()
-
-        revenue = db.session.query(db.func.sum(Payment.amount)).filter(
-            Payment.status == 'Completed',
-            extract('year', Payment.created_at) == last_month_start.year,
-            extract('month', Payment.created_at) == last_month_start.month,
-        ).scalar() or 0.0
-
-        pending_revenue = db.session.query(db.func.sum(Payment.amount)).filter(
-            Payment.status == 'Pending',
-            extract('year', Payment.created_at) == last_month_start.year,
-            extract('month', Payment.created_at) == last_month_start.month,
-        ).scalar() or 0.0
-
-        unique_patients = db.session.query(Patient.id).join(
-            Appointment, Appointment.patient_id == Patient.id
-        ).filter(
-            Appointment.date >= last_month_start,
-            Appointment.date <= last_month_end,
-        ).distinct().count()
-
-        dept_stats = db.session.query(
-            Department.name,
-            db.func.count(Appointment.id).label('count'),
-        ).outerjoin(Doctor, Doctor.department_id == Department.id)\
-         .outerjoin(Appointment, Appointment.doctor_id == Doctor.id)\
-         .filter(Appointment.date >= last_month_start, Appointment.date <= last_month_end)\
-         .group_by(Department.id, Department.name).all()
-
-        top_doctors = db.session.query(
-            Doctor.full_name,
-            db.func.count(Appointment.id).label('count'),
-        ).join(Appointment, Appointment.doctor_id == Doctor.id)\
-         .filter(Appointment.date >= last_month_start, Appointment.date <= last_month_end)\
-         .group_by(Doctor.id, Doctor.full_name)\
-         .order_by(db.func.count(Appointment.id).desc())\
-         .limit(10).all()
-
-        payment_stats = db.session.query(
-            Payment.status,
-            db.func.count(Payment.id).label('count'),
-            db.func.sum(Payment.amount).label('amount'),
-        ).filter(
-            extract('year', Payment.created_at) == last_month_start.year,
-            extract('month', Payment.created_at) == last_month_start.month,
-        ).group_by(Payment.status).all()
-
-        billing_rows_data = db.session.query(
-            Payment, Treatment, Appointment, Patient, Doctor
-        ).join(Treatment, Payment.treatment_id == Treatment.id)\
-         .join(Appointment, Treatment.appointment_id == Appointment.id)\
-         .join(Patient, Appointment.patient_id == Patient.id)\
-         .join(Doctor, Appointment.doctor_id == Doctor.id)\
-         .filter(
-            extract('year', Payment.created_at) == last_month_start.year,
-            extract('month', Payment.created_at) == last_month_start.month,
-         ).order_by(Payment.created_at.desc()).limit(8).all()
-
-        dept_rows = ''.join(
-            f'<tr><td>{name or "Unassigned"}</td><td>{count}</td><td>{round((count / max(total_apts, 1) * 100), 1)}%</td></tr>'
-            for name, count in dept_stats
-        )
-
-        doc_rows = ''.join(
-            f'<tr><td>{name}</td><td>{count}</td><td>{round((count / max(total_apts, 1) * 100), 1)}%</td></tr>'
-            for name, count in top_doctors
-        )
-
-        payment_rows = ''.join(
-            f'<tr><td>{status}</td><td>{count}</td><td>Rs. {float(amount or 0.0):,.2f}</td></tr>'
-            for status, count, amount in payment_stats
-        )
-
-        billing_rows = ''.join(
-            f'<tr><td>{patient.full_name}</td><td>{doctor.full_name}</td><td>{treatment.diagnosis}</td><td>Rs. {float(payment.amount):,.2f}</td><td>{payment.status}</td></tr>'
-            for payment, treatment, appointment, patient, doctor in billing_rows_data
-        )
-
-        completion_rate = round((completed_apts / max(total_apts, 1) * 100), 1)
-
-        html = f"""<!DOCTYPE html>
+                revenue = 0.0
+                billing_rows = ""
+                for a in apts:
+                    if a.status == "Completed" and a.treatment:
+                        diag = a.treatment.diagnosis
+                        presc = a.treatment.prescription
+                        payment_status = "Unpaid"
+                        amount = 0.0
+                        if a.treatment.payment:
+                            amount = a.treatment.payment.amount
+                            if a.treatment.payment.status == "Completed" or a.treatment.payment.status == "Paid":
+                                revenue += amount
+                            payment_status = a.treatment.payment.status
+                        
+                        billing_rows += f"<tr><td>{a.patient.full_name}</td><td>{a.date.strftime('%b %d, %Y')}</td><td>{diag}</td><td>{presc}</td><td>Rs. {amount:,.2f}</td></tr>"
+                html = f"""<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Monthly Report - {month_name}</title>
+    <title>Monthly Activity Report - {month_name}</title>
     <style>
-        body {{ font-family: Arial, sans-serif; margin: 0; background: #eef4f8; color: #163047; }}
-        .container {{ max-width: 1080px; margin: 0 auto; background: white; padding: 34px; }}
-        h1 {{ color: #163047; text-align: center; margin-bottom: 10px; letter-spacing: 0.04em; }}
-        h2 {{ color: #197f71; margin-top: 32px; margin-bottom: 15px; border-bottom: 2px solid #bde5df; padding-bottom: 10px; }}
-        .lead {{ text-align: center; color: #64748b; margin-bottom: 28px; }}
-        .metrics {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 30px; }}
-        .metric-card {{ background: linear-gradient(135deg, #1f9d8b, #15665a); color: white; padding: 20px; border-radius: 14px; text-align: center; }}
-        .metric-value {{ font-size: 30px; font-weight: bold; }}
-        .metric-label {{ font-size: 14px; margin-top: 10px; opacity: 0.9; }}
-        .split {{ display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 24px; }}
-        table {{ width: 100%; border-collapse: collapse; margin-bottom: 20px; }}
-        th {{ background: #197f71; color: white; padding: 12px; text-align: left; }}
-        td {{ padding: 12px; border-bottom: 1px solid #e0e0e0; vertical-align: top; }}
-        tr:nth-child(even) {{ background: #f9f9f9; }}
-        .summary-box {{ background: #f6f9fb; border: 1px solid #dbe5ec; border-radius: 14px; padding: 18px; margin-bottom: 16px; }}
-        .summary-box p {{ margin: 0 0 10px; color: #40586e; }}
-        .footer {{ text-align: center; color: #666; margin-top: 40px; font-size: 12px; }}
+        body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f7f6; color: #333; margin: 0; padding: 20px; }}
+        .container {{ max-width: 900px; margin: auto; background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }}
+        h1 {{ text-align: center; color: #1e3a8a; margin-bottom: 5px; }}
+        table {{ width: 100%; border-collapse: collapse; margin-top: 30px; }}
+        th {{ background: #f8fafc; color: #475569; text-align: left; padding: 12px; border-bottom: 2px solid #e2e8f0; font-size: 0.85rem; text-transform: uppercase; }}
+        td {{ padding: 12px; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; }}
+        .metrics {{ display: flex; justify-content: space-between; gap: 20px; margin-top: 30px; }}
+        .metric-card {{ background: #ffffff; border: 1px solid #e2e8f0; padding: 20px; border-radius: 10px; flex: 1; text-align: center; }}
+        .metric-value {{ font-size: 28px; font-weight: bold; color: #14b8a6; display: block; }}
+        .metric-label {{ font-size: 13px; color: #64748b; text-transform: uppercase; margin-top: 5px; }}
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>ZENCURA HOSPITAL MANAGEMENT</h1>
-        <p class="lead">Monthly Report for {last_month_start.strftime('%B %Y')}</p>
-
+        <h1>Monthly Activity Report - Dr. {doctor.full_name}</h1>
+        <p style="text-align: center; color: #64748b; margin-top: 0;">Practice Summary for {last_month_start.strftime('%B %Y')}</p>
+        
         <div class="metrics">
             <div class="metric-card">
-                <div class="metric-value">{total_apts}</div>
-                <div class="metric-label">Total Appointments</div>
+                <span class="metric-value">{total_apts}</span>
+                <span class="metric-label">Total Appointments</span>
             </div>
             <div class="metric-card">
-                <div class="metric-value">{completed_apts}</div>
-                <div class="metric-label">Completed Visits</div>
+                <span class="metric-value">{completed_apts}</span>
+                <span class="metric-label">Completed ({completion_rate}%)</span>
             </div>
             <div class="metric-card">
-                <div class="metric-value">Rs. {revenue:,.0f}</div>
-                <div class="metric-label">Collected Revenue</div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-value">{completion_rate}%</div>
-                <div class="metric-label">Completion Rate</div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-value">{unique_patients}</div>
-                <div class="metric-label">Patients Seen</div>
+                <span class="metric-value">Rs. {revenue:,.0f}</span>
+                <span class="metric-label">Revenue Generated</span>
             </div>
         </div>
-
-        <div class="split">
-            <div>
-                <h2>Department Performance</h2>
-                <table>
-                    <tr><th>Department</th><th>Appointments</th><th>Percentage</th></tr>
-                    {dept_rows or '<tr><td colspan="3">No department data available</td></tr>'}
-                </table>
-            </div>
-            <div>
-                <h2>Payment Summary</h2>
-                <div class="summary-box">
-                    <p><strong>Collected Revenue:</strong> Rs. {float(revenue):,.2f}</p>
-                    <p><strong>Pending Revenue:</strong> Rs. {float(pending_revenue):,.2f}</p>
-                    <p><strong>Report Window:</strong> {last_month_start.isoformat()} to {last_month_end.isoformat()}</p>
-                </div>
-                <table>
-                    <tr><th>Status</th><th>Transactions</th><th>Amount</th></tr>
-                    {payment_rows or '<tr><td colspan="3">No payment entries available</td></tr>'}
-                </table>
-            </div>
-        </div>
-
-        <h2>Top Performing Doctors</h2>
+        <h2 style="margin-top: 40px; font-size: 1.2rem; color: #334155;">Patient Cases & Treatments</h2>
         <table>
-            <tr><th>Doctor Name</th><th>Appointments</th><th>Percentage</th></tr>
-            {doc_rows or '<tr><td colspan="3">No doctor performance data available</td></tr>'}
+            <thead><tr><th>Patient</th><th>Date</th><th>Diagnosis</th><th>Treatments</th><th>Cost</th></tr></thead>
+            <tbody>
+                {billing_rows or '<tr><td colspan="5" style="text-align: center; color: #94a3b8; padding: 40px;">No completed cases recorded in this period</td></tr>'}
+            </tbody>
         </table>
-
-        <h2>Recent Billing Activity</h2>
-        <table>
-            <tr><th>Patient</th><th>Doctor</th><th>Diagnosis</th><th>Amount</th><th>Status</th></tr>
-            {billing_rows or '<tr><td colspan="5">No billing activity captured for this month</td></tr>'}
-        </table>
-
-        <div class="footer">
-            <p>Generated on {date.today().strftime('%Y-%m-%d %H:%M:%S')} | Zencura HMS 2026</p>
-            <p>Confidential - Internal Use Only</p>
-        </div>
+        <p style="text-align: center; margin-top: 50px; color: #94a3b8; font-size: 12px;">Automated Report generated by Zencura Hospital Management System v2.0</p>
     </div>
 </body>
-</html>"""
-
-        report_file = f"Monthly_Report_{month_name}.html"
-        report_path = os.path.join(reports_dir, report_file)
-
-        with open(report_path, 'w', encoding='utf-8') as file:
-            file.write(html)
-
-        logger.info(f'Report generated: {report_file}')
-        return {'status': 'success', 'report': report_file}
-
+</html>
+"""
+                msg = Message(
+                    subject=f"Monthly Activity Report - {last_month_start.strftime('%B %Y')}",
+                    recipients=[user.email],
+                    html=html
+                )
+                mail.send(msg)
+                logger.info(f"Sent monthly report to Dr. {doctor.full_name} at {user.email}")
+                sent_count += 1
+            reports_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "frontend", "static", "reports")
+            if not os.path.exists(reports_dir):
+                os.makedirs(reports_dir)
+            archive_filename = f"Hospital_Summary_{month_name}.html"
+            archive_path = os.path.join(reports_dir, archive_filename)
+            summary_html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Zencura Global Summary - {month_name}</title>
+    <style>
+        body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f8fafc; padding: 40px; }}
+        .container {{ max-width: 800px; margin: auto; background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); text-align: center; }}
+        h1 {{ color: #1e3a8a; }}
+        .timestamp {{ font-size: 14px; color: #94a3b8; margin-top: 20px; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Global Hospital Monthly Report Hub</h1>
+        <p>This archive contains the activity overview for {last_month_start.strftime('%B %Y')}.</p>
+        <div class="timestamp">Generated on {today.strftime('%B %d, %Y')}</div>
+    </div>
+</body>
+</html>
+"""
+            with open(archive_path, "w", encoding="utf-8") as f:
+                f.write(summary_html)
+                
+        return {"status": "success", "msg": f"Sent {sent_count} monthly reports successfully"}
+        
     except Exception as error:
-        logger.error(f'Report generation failed: {error}')
-        return {'status': 'error', 'message': str(error)}
+        logger.error(f"Report generation failed: {error}")
+        return {"status": "error", "message": str(error)}

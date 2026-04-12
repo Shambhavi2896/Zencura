@@ -191,18 +191,37 @@ const DoctorDashboard = {
                 <p style="font-size:0.85rem; color:var(--gray-400); margin-bottom:1.5rem;">Set your schedule for patients</p>
 
                 <div class="panel" style="max-width:560px;">
-                    <div class="panel-header">Current Schedule</div>
-                    <div style="font-size:0.92rem; color:var(--navy); padding:0.75rem 0; border-bottom:1px solid var(--gray-100); margin-bottom:1rem;">
-                        {{ availabilityText || 'Not set' }}
+                    <div class="panel-header">Weekly Schedule</div>
+                    <p class="text-muted small mb-3">Select the days and hours you are available for consultations.</p>
+
+                    <div class="availability-picker mb-4">
+                        <div v-for="day in weekDays" :key="day" 
+                             class="day-chip" 
+                             :class="{active: selectedDays.includes(day)}"
+                             @click="toggleDay(day)">
+                            {{ day }}
+                        </div>
                     </div>
 
-                    <div class="panel-header mt-3">Update Availability</div>
-                    <div class="mb-3">
-                        <textarea class="form-control" v-model="newAvailability" rows="3" placeholder="e.g. Mon-Fri 09:00-17:00&#10;Saturday 10:00-14:00&#10;Sunday Closed"></textarea>
+                    <div class="row g-3 mb-4" v-if="selectedDays.length > 0">
+                        <div class="col-6">
+                            <label class="form-label">Start Time</label>
+                            <input type="time" class="form-control" v-model="availabilityHours.start">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">End Time</label>
+                            <input type="time" class="form-control" v-model="availabilityHours.end">
+                        </div>
                     </div>
-                    <button class="btn btn-teal btn-sm" @click="saveAvailability" :disabled="savingAvailability">
-                        {{ savingAvailability ? 'Saving...' : 'Save Changes' }}
+
+                    <div v-else class="alert alert-light border border-dashed text-center mb-4">
+                        Please select at least one day
+                    </div>
+
+                    <button class="btn btn-teal w-100" @click="saveAvailability" :disabled="savingAvailability || selectedDays.length === 0">
+                        {{ savingAvailability ? 'Saving...' : 'Update Availability' }}
                     </button>
+                    <p v-if="availabilityText" class="mt-3 text-center small text-muted">Current: {{ availabilityText }}</p>
                 </div>
             </div>
         </div>
@@ -224,13 +243,17 @@ const DoctorDashboard = {
                                 <textarea class="form-control" v-model="treatmentForm.prescription" rows="2" required placeholder="Enter medications and dosage..."></textarea>
                             </div>
                             <div class="row g-3">
-                                <div class="col-md-8">
+                                <div class="col-md-5">
                                     <label class="form-label">Notes</label>
                                     <textarea class="form-control" v-model="treatmentForm.notes" rows="2" placeholder="Additional notes..."></textarea>
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label">Next Visit</label>
                                     <input type="date" class="form-control" v-model="treatmentForm.next_visit">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Fee ($)</label>
+                                    <input type="number" class="form-control" v-model="treatmentForm.amount" required min="0" step="0.01">
                                 </div>
                             </div>
                             <div class="d-flex justify-content-end gap-2 mt-4">
@@ -266,7 +289,9 @@ const DoctorDashboard = {
     const selectedPatient = Vue.ref(null);
     const historyData = Vue.reactive({ patient: null, records: [] });
     const availabilityText = Vue.ref("");
-    const newAvailability = Vue.ref("");
+    const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const selectedDays = Vue.ref([]);
+    const availabilityHours = Vue.reactive({ start: "09:00", end: "17:00" });
     const savingAvailability = Vue.ref(false);
     const treatmentForm = Vue.reactive({
       appointmentId: null,
@@ -275,6 +300,7 @@ const DoctorDashboard = {
       prescription: "",
       notes: "",
       next_visit: "",
+      amount: 150.00,
     });
     const savingTreatment = Vue.ref(false);
     let treatmentModalInstance = null;
@@ -398,20 +424,43 @@ const DoctorDashboard = {
         if (res.ok) {
           const data = await res.json();
           availabilityText.value = data.availability;
-          newAvailability.value = data.availability;
+          try {
+            // Try parsing if it's JSON
+            const parsed = JSON.parse(data.availability);
+            selectedDays.value = parsed.days || [];
+            availabilityHours.start = parsed.start || "09:00";
+            availabilityHours.end = parsed.end || "17:00";
+          } catch (e) {
+            // Fallback for legacy text data
+            selectedDays.value = [];
+          }
         }
       } catch (e) {}
     };
 
+    const toggleDay = (day) => {
+      if (selectedDays.value.includes(day)) {
+        selectedDays.value = selectedDays.value.filter((d) => d !== day);
+      } else {
+        selectedDays.value.push(day);
+      }
+    };
+
     const saveAvailability = async () => {
       savingAvailability.value = true;
+      const payload = JSON.stringify({
+        days: selectedDays.value,
+        start: availabilityHours.start,
+        end: availabilityHours.end,
+      });
       try {
         const res = await fetchApi("/api/doctor/availability", {
           method: "PUT",
-          body: JSON.stringify({ availability: newAvailability.value }),
+          body: JSON.stringify({ availability: payload }),
         });
         if (res.ok) {
-          availabilityText.value = newAvailability.value;
+          const readable = `${selectedDays.value.join(", ")} ${availabilityHours.start}-${availabilityHours.end}`;
+          availabilityText.value = readable;
           alert("Availability updated successfully");
         }
       } catch (e) {
@@ -441,6 +490,7 @@ const DoctorDashboard = {
                 treatmentForm.prescription = record.treatment.prescription;
                 treatmentForm.notes = record.treatment.notes || "";
                 treatmentForm.next_visit = record.treatment.next_visit || "";
+                treatmentForm.amount = record.treatment.payment ? record.treatment.payment.amount : 150.00;
               }
             }
           }
@@ -470,6 +520,7 @@ const DoctorDashboard = {
               prescription: treatmentForm.prescription,
               notes: treatmentForm.notes,
               next_visit: treatmentForm.next_visit || null,
+              amount: treatmentForm.amount,
             }),
           }
         );
@@ -520,10 +571,14 @@ const DoctorDashboard = {
       selectedPatient,
       historyData,
       viewHistory,
-      availabilityText,
-      newAvailability,
-      savingAvailability,
+      loadAvailability,
+      weekDays,
+      selectedDays,
+      availabilityHours,
+      toggleDay,
       saveAvailability,
+      availabilityText,
+      savingAvailability,
       treatmentForm,
       savingTreatment,
       openTreatmentModal,

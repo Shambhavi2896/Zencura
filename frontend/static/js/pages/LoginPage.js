@@ -1,29 +1,35 @@
 const LoginPage = {
   template: `
-    <div class="auth-page">
-        <div class="auth-card fade-in">
-            <img src="/static/assets/logo.jpg" class="auth-logo" alt="ZenCura">
-            <h1 class="auth-title">Welcome Back</h1>
-            <p class="auth-subtitle">Sign in to ZenCura Hospital Management</p>
-            <form @submit.prevent="login">
-                <div class="mb-3">
-                    <input type="text" class="form-control" v-model="username" placeholder="Username" required>
-                </div>
-                <div class="mb-3">
-                    <input type="password" class="form-control" v-model="password" placeholder="Password" required>
-                </div>
-                <div v-if="error" class="alert alert-danger mb-3">{{ error }}</div>
-                <button type="submit" class="btn btn-teal w-100" :disabled="loading">
-                    <span v-if="loading" class="spinner-border spinner-border-sm me-2"></span>
-                    {{ loading ? 'Signing in...' : 'Sign In' }}
-                </button>
-            </form>
-            <p class="auth-footer">
-                New patient? <router-link to="/register" class="auth-link">Register here</router-link>
-            </p>
+    <div class="auth-page-wrapper">
+        <guest-nav-bar></guest-nav-bar>
+        <div class="auth-page">
+            <div class="auth-card fade-in">
+                <img src="/static/assets/logo.jpg" class="auth-logo" alt="ZenCura">
+                <h1 class="auth-title">Welcome Back</h1>
+                <p class="auth-subtitle">Sign in to ZenCura Hospital Management</p>
+                <form @submit.prevent="login">
+                    <div class="mb-3">
+                        <input type="text" class="form-control" v-model="username" placeholder="Username" required>
+                    </div>
+                    <div class="mb-3">
+                        <input type="password" class="form-control" v-model="password" placeholder="Password" required>
+                    </div>
+                    <div v-if="error" class="alert alert-danger mb-3">{{ error }}</div>
+                    <button type="submit" class="btn btn-teal w-100" :disabled="loading">
+                        <span v-if="loading" class="spinner-border spinner-border-sm me-2"></span>
+                        {{ loading ? 'Signing in...' : 'Sign In' }}
+                    </button>
+                </form>
+                <p class="auth-footer">
+                    New patient? <router-link to="/register" class="auth-link">Register here</router-link>
+                </p>
+            </div>
         </div>
     </div>
     `,
+  components: {
+    "guest-nav-bar": GuestNavBar,
+  },
   setup() {
     const username = Vue.ref("");
     const password = Vue.ref("");

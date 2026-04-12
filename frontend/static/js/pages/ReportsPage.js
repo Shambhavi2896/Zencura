@@ -95,7 +95,7 @@ const ReportsPage = {
               </div>
               <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
                 <input type="month" class="form-control" style="max-width: 190px;" v-model="selectedMonth" />
-                <button class="btn btn-outline-teal" @click="generateMonthlyReport" :disabled="generatingReport">
+                <button class="btn btn-outline-teal text-nowrap" @click="generateMonthlyReport" :disabled="generatingReport">
                   <span v-if="generatingReport" class="spinner-border spinner-border-sm me-2"></span>
                   Generate Monthly Report
                 </button>
@@ -160,15 +160,17 @@ const ReportsPage = {
                   <div class="panel h-100">
                     <div class="panel-header">Payment Breakdown</div>
                     <div class="d-grid gap-2">
-                      <div v-for="item in monthlyReport.payment_status" :key="item.status" class="d-flex justify-content-between align-items-center border rounded px-3 py-2">
-                        <div>
-                          <div class="fw-semibold">{{ item.status }}</div>
-                          <div class="small text-muted">{{ item.count }} transaction(s)</div>
+                      <template v-for="item in monthlyReport.payment_status" :key="item.status">
+                        <div v-if="['Pending', 'Completed', 'Booked'].includes(item.status)" class="d-flex justify-content-between align-items-center border rounded px-3 py-2">
+                          <div>
+                            <div class="fw-semibold">{{ item.status }}</div>
+                            <div class="small text-muted">{{ item.count }} transaction(s)</div>
+                          </div>
+                          <div class="fw-semibold">{{ formatCurrency(item.amount) }}</div>
                         </div>
-                        <div class="fw-semibold">{{ formatCurrency(item.amount) }}</div>
-                      </div>
-                      <div v-if="monthlyReport.payment_status.length === 0" class="text-center text-muted py-4">
-                        No payment activity for this month.
+                      </template>
+                      <div v-if="monthlyReport.payment_status.filter(s => ['Pending', 'Completed', 'Booked'].includes(s.status)).length === 0" class="text-center text-muted py-4">
+                        No pending or completed activity for this month.
                       </div>
                     </div>
                   </div>
@@ -240,14 +242,16 @@ const ReportsPage = {
                         </tr>
                       </thead>
                       <tbody>
-                        <tr v-for="item in monthlyReport.recent_billings" :key="item.id">
-                          <td class="fw-semibold">{{ item.patient }}</td>
-                          <td>{{ item.doctor }}</td>
-                          <td>{{ item.diagnosis }}</td>
-                          <td>{{ formatCurrency(item.amount) }}</td>
-                          <td><span class="status-pill" :class="statusClass(item.status)">{{ item.status }}</span></td>
-                        </tr>
-                        <tr v-if="monthlyReport.recent_billings.length === 0">
+                        <template v-for="item in monthlyReport.recent_billings" :key="item.id">
+                          <tr v-if="['Pending', 'Completed', 'Booked', 'Paid'].includes(item.status) && item.status !== 'Paid'">
+                            <td class="fw-semibold">{{ item.patient }}</td>
+                            <td>{{ item.doctor }}</td>
+                            <td>{{ item.diagnosis }}</td>
+                            <td>{{ formatCurrency(item.amount) }}</td>
+                            <td><span class="status-pill" :class="statusClass(item.status)">{{ item.status }}</span></td>
+                          </tr>
+                        </template>
+                        <tr v-if="monthlyReport.recent_billings.filter(b => b.status !== 'Paid').length === 0">
                           <td colspan="5" class="text-center text-muted py-4">No billing entries for this month.</td>
                         </tr>
                       </tbody>
@@ -355,7 +359,7 @@ const ReportsPage = {
 
     const statusClass = (status) => {
       const normalized = (status || "").toLowerCase();
-      if (normalized === "completed" || normalized === "paid") return "completed";
+      if (normalized === "completed") return "completed";
       if (normalized === "pending" || normalized === "booked") return "booked";
       return "cancelled";
     };
@@ -384,23 +388,36 @@ const ReportsPage = {
               {
                 label: "Appointments",
                 data: overview.daily_trend.appointments,
-                borderColor: "#1f9d8b",
-                backgroundColor: "rgba(31, 157, 139, 0.18)",
-                tension: 0.35,
+                borderColor: "#0d9488",
+                backgroundColor: "rgba(13, 148, 136, 0.15)",
+                tension: 0.4,
                 fill: true,
+                pointBackgroundColor: "#0d9488",
+                pointBorderColor: "#000",
+                pointBorderWidth: 1.5,
+                pointRadius: 4,
               },
               {
                 label: "Completed",
                 data: overview.daily_trend.completed,
-                borderColor: "#163047",
-                tension: 0.35,
+                borderColor: "#8b5cf6",
+                backgroundColor: "rgba(139, 92, 246, 0.1)",
+                tension: 0.4,
+                fill: true,
+                pointBackgroundColor: "#8b5cf6",
+                pointBorderColor: "#000",
+                pointBorderWidth: 1.5,
               },
             ],
           },
           options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { position: "bottom" } },
+            plugins: { legend: { position: "top", labels: { usePointStyle: true, boxWidth: 6, font: { weight: 'bold' } } } },
+            scales: {
+                y: { grid: { color: 'rgba(0,0,0,0.03)' } },
+                x: { grid: { display: false } }
+            }
           },
         });
       }
@@ -413,7 +430,10 @@ const ReportsPage = {
             datasets: [
               {
                 data: overview.payment_status.map((item) => item.amount),
-                backgroundColor: ["#1f9d8b", "#f59e0b", "#ef4444", "#64748b"],
+                backgroundColor: ["#10b981", "#f59e0b", "#f43f5e", "#6366f1"],
+                hoverOffset: 10,
+                borderColor: "#000",
+                borderWidth: 1.5,
               },
             ],
           },
@@ -446,11 +466,11 @@ const ReportsPage = {
         overview.recent_payments = data.recent_payments || [];
         overview.archives = data.archives || [];
         selectedArchive.value = overview.archives[0] || null;
-        Vue.nextTick(renderCharts);
       } catch (error) {
         console.error("Error loading reports overview:", error);
       } finally {
         loadingOverview.value = false;
+        Vue.nextTick(renderCharts);
       }
     };
 

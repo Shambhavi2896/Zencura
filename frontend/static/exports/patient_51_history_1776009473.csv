@@ -1,0 +1,4 @@
+Record ID,User ID,Username,Date,Time,Consulting Doctor,Department,Status,Diagnosis,Treatment Given (Prescription),Notes,Next Visit,Consultation Fee
+64,73,abc,2026-04-23,10:00,Dr. Rohan Mehta,Orthopedics,Booked,,,,,N/A
+62,73,abc,2026-04-12,14:30,Dr. Steven Strange,General Medicine,Booked,,,,,N/A
+61,73,abc,2026-04-10,10:00,Dr. Steven Strange,General Medicine,Completed,Seasonal Flu,"Paracetamol 500mg, Rest, Fluids",Patient showing recovery signs.,2026-04-17,Rs. 150.00

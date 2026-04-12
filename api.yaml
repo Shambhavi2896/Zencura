@@ -1,0 +1,136 @@
+openapi: 3.0.0
+info:
+  title: ZenCura Hospital Management System API
+  description: API documentation for the ZenCura HMS V2, allowing for patient management, appointment scheduling, and clinical reporting.
+  version: 2.0.0
+
+servers:
+  - url: http://localhost:5000
+    description: Development server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+paths:
+  /api/auth/login:
+    post:
+      summary: Authenticate user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Successful login
+        '401':
+          description: Invalid credentials
+
+  /api/admin/dashboard:
+    get:
+      summary: Get system-wide statistics for Admin
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Combined stats for doctors, patients, and revenue
+
+  /api/patient/doctors:
+    get:
+      summary: Search and filter available doctors
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: department
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of doctors matching criteria
+
+  /api/patient/appointments:
+    post:
+      summary: Book a new appointment
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                doctor_id:
+                  type: integer
+                date:
+                  type: string
+                  format: date
+                time:
+                  type: string
+      responses:
+        '201':
+          description: Appointment successfully booked
+
+  /api/doctor/appointments:
+    get:
+      summary: Fetch assigned appointments for a Doctor
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of scheduled visits
+
+  /api/doctor/treatments:
+    post:
+      summary: Record a diagnosis and treatment
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                appointment_id:
+                  type: integer
+                diagnosis:
+                  type: string
+                prescription:
+                  type: string
+                amount:
+                  type: number
+      responses:
+        '201':
+          description: Treatment and invoice recorded
+
+  /api/patient/export:
+    post:
+      summary: Request asynchronous medical history export
+      security:
+        - bearerAuth: []
+      responses:
+        '202':
+          description: Export task started (Celery background job)
+
+  /api/reports/overview:
+    get:
+      summary: High-level management analytics
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Financial and trend data summaries

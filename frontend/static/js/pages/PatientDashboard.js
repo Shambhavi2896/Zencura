@@ -53,25 +53,43 @@ const PatientDashboard = {
                     </div>
                 </div>
 
-                <div class="panel">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <div class="panel-header mb-0">Upcoming Appointments</div>
-                        <a style="color:var(--teal-600); cursor:pointer; font-size:0.82rem; font-weight:500;" @click="switchTab('appointments')">View all</a>
+                <div class="row g-3">
+                    <div class="col-lg-7">
+                        <div class="panel h-100">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div class="panel-header mb-0">Upcoming Appointments</div>
+                                <a style="color:var(--teal-600); cursor:pointer; font-size:0.82rem; font-weight:500;" @click="switchTab('appointments')">View all</a>
+                            </div>
+                            <table class="table table-sm align-middle mb-0" style="font-size:0.85rem;">
+                                <thead><tr style="color:var(--gray-400); font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em;"><th>Doctor</th><th>Date</th><th>Time</th><th>Status</th></tr></thead>
+                                <tbody>
+                                    <tr v-for="apt in stats.upcoming_appointments" :key="apt.id">
+                                        <td><div class="fw-medium">{{ apt.doctor }}</div><div class="text-muted" style="font-size:0.7rem;">{{ apt.department }}</div></td>
+                                        <td>{{ apt.date }}</td>
+                                        <td>{{ apt.time }}</td>
+                                        <td><span class="status-pill" :class="apt.status.toLowerCase()">{{ apt.status }}</span></td>
+                                    </tr>
+                                    <tr v-if="!stats.upcoming_appointments || stats.upcoming_appointments.length === 0"><td colspan="4" class="text-center py-4 text-muted">No upcoming appointments</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                    <table class="table table-sm align-middle mb-0" style="font-size:0.85rem;">
-                        <thead><tr style="color:var(--gray-400); font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em;"><th class="ps-3">ID</th><th>Doctor</th><th>Department</th><th>Date</th><th>Time</th><th>Status</th></tr></thead>
-                        <tbody>
-                            <tr v-for="apt in stats.upcoming_appointments" :key="apt.id">
-                                <td class="ps-3 text-muted fw-medium">#{{ apt.id }}</td>
-                                <td class="fw-medium">{{ apt.doctor }}</td>
-                                <td>{{ apt.department }}</td>
-                                <td>{{ apt.date }}</td>
-                                <td>{{ apt.time }}</td>
-                                <td><span class="status-pill" :class="apt.status.toLowerCase()">{{ apt.status }}</span></td>
-                            </tr>
-                            <tr v-if="!stats.upcoming_appointments || stats.upcoming_appointments.length === 0"><td colspan="6" class="text-center py-4 text-muted">No upcoming appointments</td></tr>
-                        </tbody>
-                    </table>
+                    <div class="col-lg-5">
+                        <div class="panel h-100">
+                            <div class="panel-header mb-3">Latest Consultations</div>
+                            <div v-if="appointments.filter(a => a.status === 'Completed').length > 0">
+                                <div v-for="a in appointments.filter(a => a.status === 'Completed').slice(0, 3)" :key="a.id" class="mb-3 p-2 bg-light rounded border-start border-4 border-teal">
+                                    <div class="d-flex justify-content-between small fw-bold mb-1">
+                                        <span>{{ a.doctor_name }}</span>
+                                        <span class="text-muted">{{ a.date }}</span>
+                                    </div>
+                                    <div class="text-truncate small text-teal-700" v-if="a.treatment">{{ a.treatment.diagnosis }}</div>
+                                    <div class="text-muted small" v-else>No record available</div>
+                                </div>
+                            </div>
+                            <div v-else class="text-center py-5 text-muted small">No past consultations found</div>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div v-show="activeTab === 'doctors'" class="fade-in">
@@ -140,8 +158,9 @@ const PatientDashboard = {
                                             <button class="btn btn-sm btn-outline-teal py-0 px-2" style="font-size:0.75rem;" @click="openRescheduleModal(apt)">Reschedule</button>
                                             <button class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size:0.75rem;" @click="cancelAppointment(apt.id)">Cancel</button>
                                         </div>
-                                        <div class="d-flex gap-1" v-if="apt.status === 'Completed' && apt.treatment">
-                                            <button class="btn btn-sm btn-light py-0 px-2" style="font-size:0.75rem;" @click="viewTreatment(apt)">View Record</button>
+                                        <div class="d-flex gap-1" v-if="apt.status === 'Completed'">
+                                            <button v-if="apt.treatment" class="btn btn-sm btn-teal py-0 px-2" style="font-size:0.75rem;" @click="viewTreatment(apt)">View History</button>
+                                            <span v-else class="text-muted small">No record</span>
                                         </div>
                                     </td>
                                 </tr>
@@ -331,7 +350,7 @@ const PatientDashboard = {
     const isReschedule = Vue.ref(false);
     const selectedDoctor = Vue.ref(null);
     const rescheduleAptId = Vue.ref(null);
-    const bookingForm = Vue.reactive({ date: "", time: "" });
+    const bookingForm = Vue.reactive({ date: "", time: "", cardNumber: "", expiry: "", cvc: "" });
     const availableSlots = Vue.ref([]);
     const loadingSlots = Vue.ref(false);
     const savingAppointment = Vue.ref(false);
@@ -376,8 +395,14 @@ const PatientDashboard = {
             "&department=" +
             filterDept.value
         );
-        if (res.ok) doctorsList.value = await res.json();
-      } catch (e) {}
+        if (res.ok) {
+           doctorsList.value = await res.json();
+        } else {
+           console.error("Fetch doctors failed with status:", res.status);
+        }
+      } catch (e) {
+        console.error("Fetch doctors error:", e);
+      }
     };
 
     const fetchAppointments = async () => {
@@ -471,7 +496,13 @@ const PatientDashboard = {
         const data = await res.json();
 
         if (res.ok && data.task_id) {
-          pollExportStatus(data.task_id);
+          if (data.task_status === "SUCCESS") {
+            exportingCSV.value = false;
+            alert("Export Complete! Your treatment history is ready for download.");
+            window.open(data.task_result, "_blank");
+          } else {
+            pollExportStatus(data.task_id);
+          }
         } else {
           alert(data.msg || "Export failed to start");
           exportingCSV.value = false;
@@ -489,6 +520,7 @@ const PatientDashboard = {
 
         if (data.task_status === "SUCCESS") {
           exportingCSV.value = false;
+          alert("Export Complete! Your treatment history is ready for download.");
           window.open(data.task_result, "_blank");
         } else if (data.task_status === "FAILURE") {
           exportingCSV.value = false;
@@ -551,6 +583,9 @@ const PatientDashboard = {
     const resetBookingFlow = () => {
       bookingForm.date = "";
       bookingForm.time = "";
+      bookingForm.cardNumber = "";
+      bookingForm.expiry = "";
+      bookingForm.cvc = "";
       bookingError.value = "";
     };
 
@@ -616,6 +651,8 @@ const PatientDashboard = {
         document.getElementById("appointmentModal")
       );
       loadDashboard();
+      fetchDepartments();
+      fetchDoctors();
     });
 
     return {

@@ -1,5 +1,5 @@
 const routes = [
-  { path: "/", redirect: "/login" },
+  { path: "/", component: HomePage },
   {
     path: "/login",
     component: LoginPage,

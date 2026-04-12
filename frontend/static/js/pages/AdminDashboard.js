@@ -188,7 +188,8 @@ const AdminDashboard = {
                                 <div><span class="detail-label">Gender</span> {{ pat.gender || '-' }}</div>
                             </div>
                             <div class="d-flex gap-2 mt-3 pt-2" style="border-top:1px solid var(--gray-100);">
-                                <button class="btn btn-sm flex-grow-1" style="font-size:0.78rem;" :class="pat.is_active ? 'btn-outline-danger' : 'btn-outline-success'" @click="toggleStatus(pat.user_id, 'patients')">{{ pat.is_active ? 'Blacklist' : 'Activate' }}</button>
+                                <button class="btn btn-sm btn-teal flex-grow-1" style="font-size:0.78rem;" @click="viewPatientHistory(pat)">Medical History</button>
+                                <button class="btn btn-sm" style="font-size:0.78rem;" :class="pat.is_active ? 'btn-outline-danger' : 'btn-outline-success'" @click="toggleStatus(pat.user_id, 'patients')">{{ pat.is_active ? 'Blacklist' : 'Activate' }}</button>
                             </div>
                         </div>
                     </div>
@@ -294,6 +295,36 @@ const AdminDashboard = {
             </div>
         </div>
 
+        <div class="modal fade" id="historyModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content border-0 shadow" style="border-radius:12px;">
+                    <div class="modal-header" style="border-bottom:1px solid var(--gray-100); padding:1.25rem 1.5rem;">
+                        <h6 class="modal-title fw-bold m-0" v-if="historyData.patient">Medical History: {{ historyData.patient.full_name }}</h6>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body p-0" style="max-height:70vh; overflow-y:auto;">
+                        <div v-if="loadingHistory" class="p-5 text-center text-muted">Loading history...</div>
+                        <div v-else-if="historyData.records.length === 0" class="p-5 text-center text-muted">No history found for this patient</div>
+                        <div v-else class="p-3">
+                            <div v-for="rec in historyData.records" :key="rec.id" class="mb-3 p-3 border rounded">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <div class="fw-bold text-navy" style="font-size:0.9rem;">Consultation with {{ rec.doctor }}</div>
+                                    <span class="badge" :class="rec.status === 'Completed' ? 'bg-success' : 'bg-secondary'">{{ rec.status }}</span>
+                                </div>
+                                <div class="small text-muted mb-2"><i class="bi bi-calendar-event me-1"></i> {{ rec.date }} | {{ rec.time }}</div>
+                                <div v-if="rec.treatment" class="bg-light p-2 rounded">
+                                    <div class="mb-1"><strong>Diagnosis:</strong> {{ rec.treatment.diagnosis }}</div>
+                                    <div class="mb-1"><strong>Prescription:</strong> {{ rec.treatment.prescription }}</div>
+                                    <div v-if="rec.treatment.notes" class="text-muted small">Notes: {{ rec.treatment.notes }}</div>
+                                </div>
+                                <div v-else class="text-muted small italic">No treatment recorded for this visit</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="modal fade" id="doctorModal" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog modal-lg modal-dialog-centered">
                 <div class="modal-content border-0 shadow" style="border-radius:12px;">
@@ -313,7 +344,21 @@ const AdminDashboard = {
                                 <div class="col-md-6"><label class="form-label">Contact</label><input type="text" class="form-control form-control-sm" v-model="docForm.contact"></div>
                                 <div class="col-md-6"><label class="form-label">Experience</label><input type="text" class="form-control form-control-sm" v-model="docForm.experience" placeholder="e.g. 5 years"></div>
                                 <div class="col-md-6"><label class="form-label">Qualification</label><input type="text" class="form-control form-control-sm" v-model="docForm.qualification"></div>
-                                <div class="col-md-6"><label class="form-label">Availability</label><input type="text" class="form-control form-control-sm" v-model="docForm.availability" placeholder="e.g. Mon-Fri 09:00-17:00"></div>
+                                <div class="col-md-12">
+                                    <label class="form-label">Availability</label>
+                                    <div class="availability-picker mb-2">
+                                        <div v-for="day in weekDays" :key="day" 
+                                             class="day-chip" 
+                                             :class="{active: docForm.selectedDays.includes(day)}"
+                                             @click="toggleDocDay(day)">
+                                            {{ day }}
+                                        </div>
+                                    </div>
+                                    <div class="row g-2" v-if="docForm.selectedDays.length > 0">
+                                        <div class="col-6"><input type="time" class="form-control form-control-sm" v-model="docForm.availabilityHours.start"></div>
+                                        <div class="col-6"><input type="time" class="form-control form-control-sm" v-model="docForm.availabilityHours.end"></div>
+                                    </div>
+                                </div>
                                 <div class="col-md-6"><label class="form-label">Password <small class="text-muted" v-if="docForm.id">(leave blank to keep)</small></label><input type="password" class="form-control form-control-sm" v-model="docForm.password" :required="!docForm.id"></div>
                             </div>
                             <div class="d-flex justify-content-end gap-2 mt-4">
@@ -360,13 +405,18 @@ const AdminDashboard = {
       contact: "",
       experience: "",
       qualification: "",
-      availability: "",
+      selectedDays: [],
+      availabilityHours: { start: "09:00", end: "17:00" },
       password: "",
     });
+    const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
     const saving = Vue.ref(false);
     let doctorModalInstance = null;
     let barChart = null;
     let doughnutChart = null;
+    let historyModalInstance = null;
+    const historyData = Vue.reactive({ patient: null, records: [] });
+    const loadingHistory = Vue.ref(false);
 
     const filteredDoctors = Vue.computed(() =>
       doctors.value.filter((d) =>
@@ -411,8 +461,9 @@ const AdminDashboard = {
             datasets: [
               {
                 data: stats.chart_data || [],
-                backgroundColor: "#99f6e4",
-                hoverBackgroundColor: "#14b8a6",
+                backgroundColor: "rgba(79, 209, 197, 0.7)",
+                borderColor: "#000",
+                borderWidth: 1.5,
                 borderRadius: 4,
                 borderSkipped: false,
               },
@@ -424,7 +475,7 @@ const AdminDashboard = {
             scales: {
               y: {
                 beginAtZero: true,
-                ticks: { precision: 0, font: { size: 11 } },
+                ticks: { precision: 0, font: { size: 11, weight: 'bold' } },
                 grid: { color: "#f1f5f9" },
               },
               x: { grid: { display: false }, ticks: { font: { size: 11 } } },
@@ -439,9 +490,10 @@ const AdminDashboard = {
             datasets: [
               {
                 data: [stats.booked, stats.completed, stats.cancelled],
-                backgroundColor: ["#5eead4", "#86efac", "#fca5a5"],
-                borderWidth: 0,
-                spacing: 2,
+                backgroundColor: ["#4fd1c5", "#9f7aea", "#feb2b2"],
+                borderColor: "#000",
+                borderWidth: 1.5,
+                spacing: 4,
               },
             ],
           },
@@ -467,6 +519,9 @@ const AdminDashboard = {
     Vue.onMounted(async () => {
       doctorModalInstance = new bootstrap.Modal(
         document.getElementById("doctorModal")
+      );
+      historyModalInstance = new bootstrap.Modal(
+        document.getElementById("historyModal")
       );
       try {
         let res = await fetchApi("/api/admin/stats");
@@ -514,6 +569,16 @@ const AdminDashboard = {
 
     const openDoctorModal = (doc = null) => {
       if (doc) {
+        let selDays = [];
+        let hours = { start: "09:00", end: "17:00" };
+        try {
+          const parsed = JSON.parse(doc.availability);
+          selDays = parsed.days || [];
+          hours.start = parsed.start || "09:00";
+          hours.end = parsed.end || "17:00";
+        } catch (e) {
+             // Legacy text
+        }
         Object.assign(docForm, {
           id: doc.id,
           username: doc.username,
@@ -523,7 +588,8 @@ const AdminDashboard = {
           contact: doc.contact,
           experience: doc.experience,
           qualification: doc.qualification,
-          availability: doc.availability,
+          selectedDays: selDays,
+          availabilityHours: hours,
           password: "",
         });
       } else {
@@ -536,21 +602,39 @@ const AdminDashboard = {
           contact: "",
           experience: "",
           qualification: "",
-          availability: "",
+          selectedDays: [],
+          availabilityHours: { start: "09:00", end: "17:00" },
           password: "",
         });
       }
       doctorModalInstance.show();
     };
+
+    const toggleDocDay = (day) => {
+      if (docForm.selectedDays.includes(day)) {
+        docForm.selectedDays = docForm.selectedDays.filter((d) => d !== day);
+      } else {
+        docForm.selectedDays.push(day);
+      }
+    };
+
     const saveDoctor = async () => {
       saving.value = true;
       try {
+        const payload = {
+            ...docForm,
+            availability: JSON.stringify({
+                days: docForm.selectedDays,
+                start: docForm.availabilityHours.start,
+                end: docForm.availabilityHours.end
+            })
+        };
         const url = docForm.id
           ? "/api/admin/doctors/" + docForm.id
           : "/api/admin/doctors";
         const res = await fetchApi(url, {
           method: docForm.id ? "PUT" : "POST",
-          body: JSON.stringify(docForm),
+          body: JSON.stringify(payload),
         });
         const data = await res.json();
         if (res.ok) {
@@ -585,6 +669,23 @@ const AdminDashboard = {
         expandedTreatment.value = null;
       } else {
         expandedTreatment.value = apt.id;
+      }
+    };
+
+    const viewPatientHistory = async (pat) => {
+      loadingHistory.value = true;
+      historyData.patient = pat;
+      historyData.records = [];
+      historyModalInstance.show();
+      try {
+        const res = await fetchApi("/api/admin/patients/" + pat.id + "/history");
+        if (res.ok) {
+          const data = await res.json();
+          historyData.records = data.records;
+        }
+      } catch (e) {
+      } finally {
+        loadingHistory.value = false;
       }
     };
 
@@ -642,10 +743,15 @@ const AdminDashboard = {
       fetchPatients,
       fetchAppointments,
       openDoctorModal,
+      toggleDocDay,
+      weekDays,
       saveDoctor,
       toggleStatus,
       expandedTreatment,
       viewTreatment,
+      viewPatientHistory,
+      historyData,
+      loadingHistory,
       logout,
       reports,
       selectedReport,
